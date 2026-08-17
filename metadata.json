@@ -1,0 +1,6 @@
+{
+  "name": "Superclub Manager",
+  "description": "A polished scorekeeper and companion app for the Superclub board game, featuring league tracking, automated match schedules, off-season finance guides, audio effects, and victory celebrations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
