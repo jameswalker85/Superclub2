@@ -26,6 +26,7 @@ export interface Player {
   trainingLevel?: number;
   scoutingLevel?: number;
   stadiumLevel?: number;
+  keyStaff?: string[];
 }
 
 export type MatchType = 'PVP' | 'SIM';

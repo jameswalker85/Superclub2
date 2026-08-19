@@ -19,6 +19,7 @@ import { SupercupModal } from './components/SupercupModal';
 import { SuperDuperScreen } from './components/SuperDuperScreen';
 import { VictoryScreen } from './components/VictoryScreen';
 import { RulesQuickRefModal } from './components/RulesQuickRefModal';
+import { KeyStaffModal } from './components/KeyStaffModal';
 
 const STORAGE_KEY = 'superclubManager';
 
@@ -38,6 +39,7 @@ export default function App() {
   const [showSupercupModal, setShowSupercupModal] = useState<boolean>(false);
   const [showRulesModal, setShowRulesModal] = useState<boolean>(false);
   const [showResetConfirm, setShowResetConfirm] = useState<boolean>(false);
+  const [editingKeyStaffPlayerId, setEditingKeyStaffPlayerId] = useState<number | null>(null);
 
   // 1. Initial Load from LocalStorage
   useEffect(() => {
@@ -249,6 +251,23 @@ export default function App() {
     );
   };
 
+  // Toggle Key Staff
+  const handleToggleStaff = (playerId: number, staffId: string) => {
+    setPlayers(prev =>
+      prev.map(p => {
+        if (p.id !== playerId) return p;
+        const curr = p.keyStaff || [];
+        const updated = curr.includes(staffId)
+          ? curr.filter(id => id !== staffId)
+          : [...curr, staffId];
+        return {
+          ...p,
+          keyStaff: updated,
+        };
+      })
+    );
+  };
+
   // Crown champion from Supercup or SuperDuper
   const handleTriggerVictory = (champName: string, reason: string) => {
     setWinnerName(champName);
@@ -387,6 +406,7 @@ export default function App() {
                   onAdjustPoints={handleAdjustPoints}
                   onUpdateStars={handleUpdateStars}
                   onUpdateSeasonsWon={handleUpdateSeasonsWon}
+                  onOpenKeyStaff={(playerId) => setEditingKeyStaffPlayerId(playerId)}
                 />
               </div>
 
@@ -480,6 +500,16 @@ export default function App() {
 
       {/* Auxiliary Dialogs */}
       {showRulesModal && <RulesQuickRefModal onClose={() => setShowRulesModal(false)} />}
+
+      {/* Key Staff Modal */}
+      {editingKeyStaffPlayerId !== null && (
+        <KeyStaffModal
+          players={players}
+          initialPlayerId={editingKeyStaffPlayerId}
+          onClose={() => setEditingKeyStaffPlayerId(null)}
+          onToggleStaff={handleToggleStaff}
+        />
+      )}
 
       {/* Reset Confirmation Dialog */}
       {showResetConfirm && (

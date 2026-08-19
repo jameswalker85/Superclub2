@@ -12,10 +12,17 @@ import {
   Star,
   Users,
   Minus,
-  Plus
+  Plus,
+  Sparkles
 } from 'lucide-react';
 import { Player } from '../types';
 import { CLUB_THEMES, REWARD_TIERS, getBandForPoints, getStadiumIncome } from '../utils/constants';
+import {
+  calculateWages,
+  getEffectiveStadiumBand,
+  calculateStaffCashBonus
+} from '../utils/staff';
+import { KeyStaffModal } from './KeyStaffModal';
 import { soundEngine } from '../utils/audio';
 
 interface OffSeasonModalProps {
@@ -58,6 +65,31 @@ export const OffSeasonModal: React.FC<OffSeasonModalProps> = ({
     });
     return initial;
   });
+
+  // Local state for active key staff per player
+  const [playerStaff, setPlayerStaff] = useState<Record<number, string[]>>(() => {
+    const initial: Record<number, string[]> = {};
+    players.forEach(p => {
+      initial[p.id] = p.keyStaff || [];
+    });
+    return initial;
+  });
+
+  // Key Staff modal state
+  const [editingStaffPlayerId, setEditingStaffPlayerId] = useState<number | null>(null);
+
+  const handleToggleStaff = (playerId: number, staffId: string) => {
+    setPlayerStaff(prev => {
+      const curr = prev[playerId] || [];
+      const updated = curr.includes(staffId)
+        ? curr.filter(id => id !== staffId)
+        : [...curr, staffId];
+      return {
+        ...prev,
+        [playerId]: updated,
+      };
+    });
+  };
 
   const handleUpdateStars = (id: number, delta: number) => {
     soundEngine.playClick();
@@ -111,6 +143,7 @@ export const OffSeasonModal: React.FC<OffSeasonModalProps> = ({
     const updatedPlayers: Player[] = players.map(p => {
       const currentStars = playerStars[p.id] ?? (isPreSeason ? 20 : p.stars);
       const upgrades = playerUpgrades[p.id] || { trainingLevel: 1, scoutingLevel: 1, stadiumLevel: 1 };
+      const currentStaff = playerStaff[p.id] || [];
       // At the start of every season, managers' VPs reset to match their updated total base stars
       return {
         ...p,
@@ -119,6 +152,7 @@ export const OffSeasonModal: React.FC<OffSeasonModalProps> = ({
         trainingLevel: upgrades.trainingLevel,
         scoutingLevel: upgrades.scoutingLevel,
         stadiumLevel: upgrades.stadiumLevel,
+        keyStaff: currentStaff,
         wins: 0,
         draws: 0,
         losses: 0,
@@ -128,12 +162,19 @@ export const OffSeasonModal: React.FC<OffSeasonModalProps> = ({
     onStartNextSeason(updatedPlayers);
   };
 
+  // Players with live updated staff for the KeyStaffModal
+  const playersWithLocalStaff: Player[] = players.map(p => ({
+    ...p,
+    stars: playerStars[p.id] ?? p.stars,
+    keyStaff: playerStaff[p.id] || [],
+  }));
+
   // Render the interactive Club Investments & Upgrades panel
   const renderClubInvestmentsContent = () => (
     <div className="space-y-4">
       <div className="text-sm text-slate-300 space-y-1">
         <p>
-          Select purchased infrastructure upgrades for each club. Training, Scouting, and Stadium capacity range from{' '}
+          Select purchased infrastructure upgrades and staff for each club. Training, Scouting, and Stadium capacity range from{' '}
           <strong className="text-amber-400">Level 1 (Default)</strong> to{' '}
           <strong className="text-amber-400">Level 4</strong>.
         </p>
@@ -149,15 +190,18 @@ export const OffSeasonModal: React.FC<OffSeasonModalProps> = ({
         {players.map(p => {
           const theme = CLUB_THEMES[p.color];
           const upgrades = playerUpgrades[p.id] || { trainingLevel: 1, scoutingLevel: 1, stadiumLevel: 1 };
+          const activeStaff = playerStaff[p.id] || [];
+          const hasMeme = activeStaff.includes('meme_shearer');
           const band = getBandForPoints(p.points);
-          const currentStadiumIncome = getStadiumIncome(upgrades.stadiumLevel, band.name);
+          const effectiveBandName = getEffectiveStadiumBand(band.name, hasMeme);
+          const currentStadiumIncome = getStadiumIncome(upgrades.stadiumLevel, effectiveBandName);
 
           return (
             <div
               key={p.id}
               className="p-3 bg-slate-900/90 border border-slate-800 rounded-xl space-y-2.5"
             >
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2.5">
                   <div
                     className="w-3.5 h-3.5 rounded-full flex-shrink-0"
@@ -169,9 +213,26 @@ export const OffSeasonModal: React.FC<OffSeasonModalProps> = ({
                   </div>
                 </div>
 
-                <div className="text-right">
-                  <span className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                    Stadium Income: +{currentStadiumIncome}M
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    id={`invest-staff-btn-${p.id}`}
+                    onClick={() => {
+                      soundEngine.playClick();
+                      setEditingStaffPlayerId(p.id);
+                    }}
+                    className={`text-[11px] px-2.5 py-1 rounded-lg border font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      activeStaff.length > 0
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+                        : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white hover:bg-slate-700'
+                    }`}
+                  >
+                    <Users className="w-3 h-3 text-amber-400" />
+                    <span>Key Staff ({activeStaff.length})</span>
+                  </button>
+
+                  <span className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20">
+                    Stadium: +{currentStadiumIncome}M{hasMeme ? ' (Tier +1)' : ''}
                   </span>
                 </div>
               </div>
@@ -289,30 +350,55 @@ export const OffSeasonModal: React.FC<OffSeasonModalProps> = ({
         <div>
           <p className="text-slate-300 text-sm mb-3">
             Every club receives <span className="text-amber-400 font-bold">120M Starting Purse</span> to
-            conduct scouting, upgrades, and Deadline Day bidding.
+            conduct scouting, upgrades, and Deadline Day bidding. You can also assign any starting Key Staff bonuses.
           </p>
           <div className="bg-slate-950/80 rounded-xl p-3 border border-slate-800 space-y-2">
             {players.map((p, idx) => {
               const theme = CLUB_THEMES[p.color];
+              const activeStaff = playerStaff[p.id] || [];
+              const { total: staffBonus } = calculateStaffCashBonus(activeStaff);
+
               return (
                 <div
                   key={p.id}
-                  className="flex items-center justify-between py-1.5 px-2 border-b border-slate-800/60 last:border-0 text-xs"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between py-2 px-2.5 border-b border-slate-800/60 last:border-0 text-xs gap-2"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-slate-500 font-mono">#{idx + 1}</span>
+                    <span className="text-slate-500 font-mono w-4">#{idx + 1}</span>
                     <div
                       className="w-3 h-3 rounded-full"
                       style={{ backgroundColor: theme.primary }}
                     />
-                    <span className="font-semibold text-white">{p.name}</span>
-                    <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20">
-                      Starting Purse
+                    <div>
+                      <span className="font-semibold text-white mr-2">{p.name}</span>
+                      <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20">
+                        Starting Purse: 120M
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between sm:justify-end gap-2.5">
+                    <button
+                      type="button"
+                      id={`preseason-staff-btn-${p.id}`}
+                      onClick={() => {
+                        soundEngine.playClick();
+                        setEditingStaffPlayerId(p.id);
+                      }}
+                      className={`text-[10px] px-2 py-0.5 rounded-lg border font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                        activeStaff.length > 0
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+                          : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white hover:bg-slate-700'
+                      }`}
+                    >
+                      <Users className="w-2.5 h-2.5 text-amber-400" />
+                      <span>Key Staff ({activeStaff.length})</span>
+                    </button>
+
+                    <span className="font-extrabold text-amber-400 font-mono text-sm">
+                      +{120 + staffBonus}M
                     </span>
                   </div>
-                  <span className="font-extrabold text-amber-400 font-mono text-sm">
-                    +120M
-                  </span>
                 </div>
               );
             })}
@@ -465,65 +551,109 @@ export const OffSeasonModal: React.FC<OffSeasonModalProps> = ({
       content: (
         <div>
           <p className="text-slate-300 text-sm mb-3">
-            Collect <span className="text-amber-400 font-bold">Placement Rewards</span> (table below)
-            plus your <span className="text-white font-semibold">Stadium Income</span>.
+            Collect <span className="text-amber-400 font-bold">Placement Rewards</span> (table below),
+            plus <span className="text-white font-semibold">Stadium Income</span> and any active{' '}
+            <span className="text-amber-400 font-semibold">Key Staff bonuses</span>.
             <br />
             <span className="text-xs text-rose-400 font-semibold block mt-1">
-              ⚠️ Note: Pay 1M in Squad Wages for every Star in your squad!
+              ⚠️ Pay 1M in Squad Wages for every Star in your squad (Sally Reecut halves this bill, rounded up).
             </span>
           </p>
 
-          <div className="bg-slate-950/80 rounded-xl p-3 border border-slate-800 space-y-2">
+          <div className="bg-slate-950/80 rounded-xl p-3 border border-slate-800 space-y-2.5">
             {sortedPlayers.map((p, idx) => {
               const reward = REWARD_TIERS[idx] || 50;
-              const wageDeduction = playerStars[p.id] ?? p.stars;
+              const activeStaff = playerStaff[p.id] || [];
+              const hasSally = activeStaff.includes('sally_reecut');
+              const hasMeme = activeStaff.includes('meme_shearer');
+
+              const baseStars = playerStars[p.id] ?? p.stars;
+              const { baseWages, finalWages, savedWages } = calculateWages(baseStars, hasSally);
+
               const upgrades = playerUpgrades[p.id] || { trainingLevel: 1, scoutingLevel: 1, stadiumLevel: 1 };
-              const band = getBandForPoints(p.points);
-              const stadiumIncome = getStadiumIncome(upgrades.stadiumLevel, band.name);
-              const netTotal = Math.max(0, reward + stadiumIncome - wageDeduction);
+              const baseBand = getBandForPoints(p.points);
+              const effectiveBandName = getEffectiveStadiumBand(baseBand.name, hasMeme);
+              const stadiumIncome = getStadiumIncome(upgrades.stadiumLevel, effectiveBandName);
+
+              const { total: staffCashBonus, breakdown: staffCashBreakdown } = calculateStaffCashBonus(activeStaff);
+
+              const netTotal = Math.max(0, reward + stadiumIncome + staffCashBonus - finalWages);
               const theme = CLUB_THEMES[p.color];
 
               return (
                 <div
                   key={p.id}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between py-2 px-2.5 border-b border-slate-800/60 last:border-0 text-xs gap-2"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between py-2.5 px-3 bg-slate-900/90 rounded-xl border border-slate-800 text-xs gap-2.5"
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2.5">
                     <span className="text-slate-500 font-mono w-4">#{idx + 1}</span>
                     <div
-                      className="w-3 h-3 rounded-full"
+                      className="w-3.5 h-3.5 rounded-full flex-shrink-0"
                       style={{ backgroundColor: theme.primary }}
                     />
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-white">{p.name}</span>
-                        {idx === 0 && <Crown className="w-3 h-3 text-amber-400" />}
+                        <span className="font-bold text-white text-sm">{p.name}</span>
+                        {idx === 0 && <Crown className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />}
                       </div>
-                      <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                      <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400 mt-0.5">
                         <span>{p.points} pts</span>
                         <span>•</span>
                         <span className="text-amber-300 flex items-center gap-0.5">
                           <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
-                          {playerStars[p.id] ?? p.stars} stars
+                          {baseStars} stars
                         </span>
                         <span>•</span>
-                        <span className={band.colorCls}>{band.name}</span>
+                        <span className={baseBand.colorCls}>{baseBand.name}</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="text-right flex sm:flex-col items-center sm:items-end justify-between gap-1">
-                    <div className="font-bold text-amber-400 font-mono text-sm">
-                      +{netTotal}M Net Total
+                  <div className="flex flex-col sm:items-end gap-1.5">
+                    <div className="flex items-center justify-between sm:justify-end gap-2.5">
+                      <button
+                        type="button"
+                        id={`finance-staff-btn-${p.id}`}
+                        onClick={() => {
+                          soundEngine.playClick();
+                          setEditingStaffPlayerId(p.id);
+                        }}
+                        className={`text-[10px] px-2 py-0.5 rounded-lg border font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                          activeStaff.length > 0
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+                            : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white hover:bg-slate-700'
+                        }`}
+                      >
+                        <Users className="w-3 h-3 text-amber-400" />
+                        <span>Key Staff ({activeStaff.length})</span>
+                      </button>
+
+                      <div className="font-bold text-amber-400 font-mono text-sm">
+                        +{netTotal}M Net Total
+                      </div>
                     </div>
-                    <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5">
+
+                    <div className="text-[10px] text-slate-400 font-mono flex flex-wrap items-center gap-1 sm:justify-end">
                       <span className="text-amber-300/90">+{reward}M placement</span>
                       <span>+</span>
-                      <span className="text-emerald-400">+{stadiumIncome}M stadium (Lvl {upgrades.stadiumLevel})</span>
-                      {wageDeduction > 0 && (
+                      <span className="text-emerald-400">
+                        +{stadiumIncome}M stadium (Lvl {upgrades.stadiumLevel}
+                        {hasMeme ? ` • Meme: ${effectiveBandName}` : ''})
+                      </span>
+                      {staffCashBonus > 0 && (
+                        <>
+                          <span>+</span>
+                          <span className="text-purple-300">
+                            +{staffCashBonus}M staff ({staffCashBreakdown.map(s => `${s.name.split(' ')[0]} +${s.amount}M`).join(', ')})
+                          </span>
+                        </>
+                      )}
+                      {finalWages > 0 && (
                         <>
                           <span>-</span>
-                          <span className="text-rose-400">-{wageDeduction}M wages</span>
+                          <span className="text-rose-400">
+                            -{finalWages}M wages{hasSally ? ` (halved from ${baseWages}M)` : ''}
+                          </span>
                         </>
                       )}
                     </div>
@@ -740,7 +870,16 @@ export const OffSeasonModal: React.FC<OffSeasonModalProps> = ({
           <ArrowRight className="w-5 h-5" />
         </button>
       </div>
+
+      {/* Embedded Key Staff Modal */}
+      {editingStaffPlayerId !== null && (
+        <KeyStaffModal
+          players={playersWithLocalStaff}
+          initialPlayerId={editingStaffPlayerId}
+          onClose={() => setEditingStaffPlayerId(null)}
+          onToggleStaff={handleToggleStaff}
+        />
+      )}
     </div>
   );
 };
-

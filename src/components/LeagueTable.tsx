@@ -1,5 +1,5 @@
 import React from 'react';
-import { Crown, Star, Plus, Minus, Flame, TrendingUp, Trophy, Award } from 'lucide-react';
+import { Crown, Star, Plus, Minus, Flame, TrendingUp, Trophy, Award, Users } from 'lucide-react';
 import { Player } from '../types';
 import { CLUB_THEMES, getBandForPoints } from '../utils/constants';
 import { soundEngine } from '../utils/audio';
@@ -10,6 +10,7 @@ interface LeagueTableProps {
   onAdjustPoints: (playerId: number, delta: number) => void;
   onUpdateStars: (playerId: number, stars: number) => void;
   onUpdateSeasonsWon?: (playerId: number, seasonsWon: number) => void;
+  onOpenKeyStaff?: (playerId: number) => void;
 }
 
 export const LeagueTable: React.FC<LeagueTableProps> = ({
@@ -18,6 +19,7 @@ export const LeagueTable: React.FC<LeagueTableProps> = ({
   onAdjustPoints,
   onUpdateStars,
   onUpdateSeasonsWon,
+  onOpenKeyStaff,
 }) => {
   // Superclub Sort order: Points desc, Stars desc, Wins desc
   const sortedPlayers = [...players].sort((a, b) => {
@@ -137,6 +139,27 @@ export const LeagueTable: React.FC<LeagueTableProps> = ({
                           >
                             {band.name}
                           </span>
+                          {onOpenKeyStaff && (
+                            <button
+                              type="button"
+                              id={`key-staff-btn-${player.id}`}
+                              onClick={() => {
+                                soundEngine.playClick();
+                                onOpenKeyStaff(player.id);
+                              }}
+                              className={`text-[9px] px-1.5 py-0.5 rounded-md border font-bold flex items-center gap-1 transition-all cursor-pointer whitespace-nowrap ${
+                                (player.keyStaff || []).length > 0
+                                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+                                  : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-white hover:bg-slate-700'
+                              }`}
+                              title="Manage Key Staff"
+                            >
+                              <Users className="w-2.5 h-2.5 text-amber-400" />
+                              <span>
+                                Staff{(player.keyStaff || []).length > 0 ? ` (${player.keyStaff!.length})` : ''}
+                              </span>
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
